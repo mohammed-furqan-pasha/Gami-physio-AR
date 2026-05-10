@@ -1,13 +1,11 @@
 // ============================================================
 // GamiPhysio AR — useVoiceSafety Hook
 // Web Speech API continuous background listener.
-// Fires callback on "STOP" or "HELP" keywords.
-// Zero server impact — runs entirely in the browser.
 // ============================================================
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import type { VoiceSafetyEvent } from '@/types'
+import type { VoiceSafetyState, VoiceSafetyEvent } from '@/types' // 🟢 Use central types
 import { VOICE_STOP_KEYWORDS, VOICE_HELP_KEYWORDS } from '@/lib/constants'
 
 export interface UseVoiceSafetyOptions {
@@ -16,23 +14,15 @@ export interface UseVoiceSafetyOptions {
   onHelp?: (event: VoiceSafetyEvent) => void
 }
 
-export interface VoiceSafetyState {
-  isListening: boolean
-  isSupported: boolean
-  lastEvent: VoiceSafetyEvent | null
-  error: string | null
-}
-
 export function useVoiceSafety({
   enabled,
   onStop,
   onHelp,
 }: UseVoiceSafetyOptions): VoiceSafetyState {
   const [state, setState] = useState<VoiceSafetyState>({
+    status: 'idle', // 🟢 Required by global type
     isListening: false,
-    isSupported: false,
     lastEvent: null,
-    error: null,
   })
 
   const recognitionRef = useRef<any>(null)
@@ -59,8 +49,9 @@ export function useVoiceSafety({
       )
 
       if (isStop || isHelp) {
+        // 🟢 Aligning with VoiceSafetyEvent global type
         const safetyEvent: VoiceSafetyEvent = {
-          keyword: isStop ? 'STOP' : 'HELP',
+          type: isStop ? 'stop' : 'help',
           timestamp: Date.now(),
           confidence,
         }
@@ -75,7 +66,6 @@ export function useVoiceSafety({
   useEffect(() => {
     isMounted.current = true
 
-    // Check support
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition
@@ -83,15 +73,16 @@ export function useVoiceSafety({
     if (!SpeechRecognition) {
       setState(s => ({
         ...s,
-        isSupported: false,
-        error: 'Web Speech API not supported in this browser.',
+        status: 'unavailable',
+        isListening: false,
       }))
       return
     }
 
-    setState(s => ({ ...s, isSupported: true }))
-
-    if (!enabled) return
+    if (!enabled) {
+      setState(s => ({ ...s, status: 'idle', isListening: false }))
+      return
+    }
 
     const recognition = new SpeechRecognition()
     recognition.continuous      = true
@@ -100,13 +91,13 @@ export function useVoiceSafety({
     recognition.maxAlternatives = 1
 
     recognition.onstart = () => {
-      if (isMounted.current) setState(s => ({ ...s, isListening: true, error: null }))
+      if (isMounted.current) setState(s => ({ ...s, status: 'active', isListening: true }))
     }
 
     recognition.onend = () => {
       if (!isMounted.current) return
       setState(s => ({ ...s, isListening: false }))
-      // Auto-restart if still enabled (browsers stop after silence)
+      
       if (enabledRef.current) {
         try { recognition.start() } catch { /* already starting */ }
       }
@@ -114,11 +105,12 @@ export function useVoiceSafety({
 
     recognition.onerror = (e: any) => {
       if (!isMounted.current) return
-      if (e.error === 'no-speech' || e.error === 'aborted') return  // Benign
+      if (e.error === 'no-speech' || e.error === 'aborted') return
+      
       setState(s => ({
         ...s,
+        status: 'error',
         isListening: false,
-        error: `Speech error: ${e.error}`,
       }))
     }
 
@@ -127,14 +119,14 @@ export function useVoiceSafety({
     try {
       recognition.start()
     } catch (err) {
-      setState(s => ({ ...s, error: 'Could not start microphone.', isListening: false }))
+      setState(s => ({ ...s, status: 'error', isListening: false }))
     }
 
     recognitionRef.current = recognition
 
     return () => {
       isMounted.current = false
-      try { recognition.stop() } catch { /* already stopped */ }
+      try { recognition.stop() } catch { /* ignore */ }
       recognitionRef.current = null
     }
   }, [enabled, handleResult])

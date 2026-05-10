@@ -157,19 +157,26 @@ export interface SessionState {
   currentAngle: number | null
   targetAngle: number
   isInTargetZone: boolean
-  holdProgress: number   // 0–1 for hold timer
-  countdown: number      // seconds left in countdown
+  holdProgress: number       // 0–1 for hold timer
+  countdown: number          // seconds left in countdown
   jitterPauses: number
   voiceStops: number
   sessionStartMs: number | null
   overachieving: boolean
 }
 
-// ── Voice safety event ─────────────────────────────────────────
+// ── Voice safety types ─────────────────────────────────────────
+
 export interface VoiceSafetyEvent {
-  keyword: 'STOP' | 'HELP'
+  type: 'stop' | 'help'      // 🟢 Changed to match hook logic
   timestamp: number
-  confidence: number
+  confidence?: number        // 🟢 Made optional for flexibility
+}
+
+export interface VoiceSafetyState {
+  status?: 'active' | 'error' | 'unavailable' | 'idle'
+  isListening: boolean
+  lastEvent: VoiceSafetyEvent | null
 }
 
 // ── Three.js AR overlay config ─────────────────────────────────

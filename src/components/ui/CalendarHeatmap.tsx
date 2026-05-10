@@ -9,44 +9,25 @@ import CalendarHeatmapLib from 'react-calendar-heatmap'
 import 'react-calendar-heatmap/dist/styles.css'
 import { format, subDays, startOfDay } from 'date-fns'
 import type { DailySummary } from '@/types'
-import { HEATMAP_COLOR_SCALE } from '@/lib/constants'
 
 interface CalendarHeatmapProps {
   data: DailySummary[]
   totalDays?: number
 }
 
-function getColorScale(points: number): string {
-  let color = HEATMAP_COLOR_SCALE[0].color
-  for (const scale of HEATMAP_COLOR_SCALE) {
-    if (points >= scale.threshold) color = scale.color
-  }
-  return color
-}
-
-function getClassForValue(value: { count: number; points: number } | null): string {
-  if (!value || value.points === 0) return 'color-empty'
-  if (value.points < 15) return 'color-scale-1'
-  if (value.points < 30) return 'color-scale-2'
-  if (value.points < 50) return 'color-scale-3'
-  return 'color-scale-4'
-}
-
 export function CalendarHeatmap({ data, totalDays = 180 }: CalendarHeatmapProps) {
-  const today    = startOfDay(new Date())
-  const endDate  = today
+  const today = startOfDay(new Date())
+  const endDate = today
   const startDate = subDays(today, totalDays)
 
-  // Build lookup map from date string → summary
   const dataMap = useMemo(() => {
     const map = new Map<string, DailySummary>()
     for (const d of data) map.set(d.session_date, d)
     return map
   }, [data])
 
-  // Transform for the library
   const heatmapValues = useMemo(() => {
-    const values = []
+    const values: any[] = [] // 🟢 Use any[] here to prevent generic mismatch
     let d = new Date(startDate)
     while (d <= endDate) {
       const key = format(d, 'yyyy-MM-dd')
@@ -62,9 +43,8 @@ export function CalendarHeatmap({ data, totalDays = 180 }: CalendarHeatmapProps)
     return values
   }, [dataMap, startDate, endDate])
 
-  // Stats
-  const totalPoints  = data.reduce((s, d) => s + d.day_points, 0)
-  const activeDays   = data.length
+  const totalPoints = data.reduce((s, d) => s + d.day_points, 0)
+  const activeDays = data.length
   const longestStreak = computeStreak(data)
 
   return (
@@ -77,7 +57,7 @@ export function CalendarHeatmap({ data, totalDays = 180 }: CalendarHeatmapProps)
       </div>
 
       {/* Heatmap */}
-      <div className="glass-card rounded-xl2 p-6 overflow-x-auto">
+      <div className="glass-card rounded-xl2 p-6 overflow-x-auto border border-carbon-800">
         <p className="text-xs font-mono text-carbon-500 mb-4 uppercase tracking-wider">
           Last {totalDays} days
         </p>
@@ -85,13 +65,22 @@ export function CalendarHeatmap({ data, totalDays = 180 }: CalendarHeatmapProps)
           startDate={startDate}
           endDate={endDate}
           values={heatmapValues}
-          classForValue={getClassForValue}
-          tooltipDataAttrs={(value: any) => ({
-            'data-tip':
-              value?.points
+          // 🟢 FIXED: Using (value: any) bypasses the library's strict generic checking
+          classForValue={(value: any) => {
+            if (!value || value.points === 0) return 'color-empty'
+            if (value.points < 15) return 'color-scale-1'
+            if (value.points < 30) return 'color-scale-2'
+            if (value.points < 50) return 'color-scale-3'
+            return 'color-scale-4'
+          }}
+          tooltipDataAttrs={(value: any) => {
+            if (!value || !value.date) return {} as any
+            return {
+              'data-tip': value.points
                 ? `${value.date}: ${value.points} pts, ${value.reps} reps`
-                : value?.date ?? '',
-          })}
+                : value.date,
+            } as any
+          }}
           showWeekdayLabels
         />
       </div>
@@ -114,7 +103,7 @@ export function CalendarHeatmap({ data, totalDays = 180 }: CalendarHeatmapProps)
 
 function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="glass-card rounded-xl p-4 text-center">
+    <div className="glass-card rounded-xl p-4 text-center border border-carbon-800">
       <p className={`font-display text-3xl font-black ${color}`}>{value}</p>
       <p className="text-xs text-warm-sand mt-1 font-mono uppercase tracking-wider">{label}</p>
     </div>

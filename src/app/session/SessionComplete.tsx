@@ -5,8 +5,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation' // 🟢 Added for direct navigation
 import type { Exercise, SessionState, UserMode } from '@/types'
-import { ScoreRing } from '@/components/ui/Badge'
+import { ScoreRing } from '@/components/ui/ScoreRing' // 🟢 Ensure correct import path
 import { SeverityBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { SCORE_COLORS, OVERACHIEVE_BONUS_PER_REP } from '@/lib/constants'
@@ -28,6 +29,7 @@ export default function SessionComplete({
   onRestart,
   onExit,
 }: SessionCompleteProps) {
+  const router = useRouter() // 🟢 Initialize router locally
   const [saved, setSaved]   = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -40,7 +42,6 @@ export default function SessionComplete({
   const overachieveBonus = overachieveBonusReps * OVERACHIEVE_BONUS_PER_REP
   const grandTotal = sessionState.totalScore + overachieveBonus
 
-  // Grade distribution
   const gradeCounts = [1, 2, 3, 4, 5].map(s =>
     sessionState.repResults.filter(r => r.score === s).length
   )
@@ -71,12 +72,17 @@ export default function SessionComplete({
       }),
     })
       .then(() => setSaved(true))
-      .catch(console.error)
+      .catch(err => console.error('[Supabase Save Error]:', err))
       .finally(() => setSaving(false))
-  }, [profileId])  // eslint-disable-line
+  }, [profileId, exercise.id, mode, sessionState, overachieveBonusReps, overachieveBonus, elapsed, saved, saving])
+
+  // 🟢 Handle navigation directly for better reliability
+  const handleViewProgress = () => {
+    router.push('/profile')
+  }
 
   return (
-    <div className="fixed inset-0 bg-carbon-950 flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 bg-carbon-950 flex items-center justify-center p-4 overflow-y-auto z-50">
       <div className="max-w-lg w-full space-y-6 py-8 animate-slide-up">
 
         {/* Header */}
@@ -92,11 +98,11 @@ export default function SessionComplete({
         </div>
 
         {/* Grand total score */}
-        <div className="glass-card rounded-xl2 p-6 text-center neon-border">
+        <div className="glass-card rounded-xl2 p-6 text-center border border-carbon-800">
           <p className="text-xs font-mono text-carbon-500 uppercase tracking-wider mb-2">
             Total Score
           </p>
-          <p className="font-display text-7xl font-black score-gradient-text">
+          <p className="font-display text-7xl font-black text-neon-green">
             {grandTotal}
           </p>
           {overachieveBonus > 0 && (
@@ -115,15 +121,15 @@ export default function SessionComplete({
 
         {/* Rep-by-rep breakdown */}
         {sessionState.repResults.length > 0 && (
-          <div className="glass-card rounded-xl p-4">
+          <div className="glass-card rounded-xl p-4 border border-carbon-800">
             <p className="text-xs font-mono text-carbon-500 uppercase tracking-wider mb-3">
               Rep Breakdown
             </p>
-            <div className="flex flex-wrap gap-3 justify-center">
+            <div className="flex flex-wrap gap-3 justify-center mb-4">
               {sessionState.repResults.map((r, i) => (
                 <div key={i} className="flex flex-col items-center gap-1">
-                  <ScoreRing score={r.score} size={52} showLabel={false} />
-                  <span className="text-xs font-mono text-carbon-500">#{r.rep_number}</span>
+                  <ScoreRing score={r.score} size={48} showLabel={false} />
+                  <span className="text-[10px] font-mono text-carbon-500">#{r.rep_number}</span>
                 </div>
               ))}
             </div>
@@ -132,10 +138,10 @@ export default function SessionComplete({
             <div className="mt-4 space-y-1.5">
               {[5, 4, 3, 2, 1].map(s => (
                 <div key={s} className="flex items-center gap-2">
-                  <span className="text-xs font-mono w-8 text-right" style={{ color: SCORE_COLORS[s] }}>
+                  <span className="text-[10px] font-mono w-8 text-right" style={{ color: SCORE_COLORS[s] }}>
                     {s}pts
                   </span>
-                  <div className="flex-1 h-2 bg-carbon-700 rounded-full overflow-hidden">
+                  <div className="flex-1 h-1.5 bg-carbon-800 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-700"
                       style={{
@@ -143,11 +149,10 @@ export default function SessionComplete({
                           ? `${(gradeCounts[s - 1] / sessionState.repResults.length) * 100}%`
                           : '0%',
                         backgroundColor: SCORE_COLORS[s],
-                        boxShadow: `0 0 6px ${SCORE_COLORS[s]}`,
                       }}
                     />
                   </div>
-                  <span className="text-xs font-mono text-carbon-500 w-4">{gradeCounts[s - 1]}</span>
+                  <span className="text-[10px] font-mono text-carbon-500 w-4">{gradeCounts[s - 1]}</span>
                 </div>
               ))}
             </div>
@@ -155,16 +160,28 @@ export default function SessionComplete({
         )}
 
         {/* Save status */}
-        <p className="text-center text-xs font-mono text-carbon-500">
-          {saving ? '⏳ Saving to profile…' : saved ? '✓ Saved to your recovery calendar' : ''}
-        </p>
+        <div className="h-6 flex items-center justify-center">
+          <p className="text-center text-xs font-mono text-carbon-500">
+            {saving ? '⏳ Saving to profile…' : saved ? '✓ Saved to your recovery calendar' : ''}
+          </p>
+        </div>
 
         {/* Actions */}
         <div className="flex flex-col gap-3">
-          <Button size="xl" variant="primary" onClick={onRestart} fullWidth>
+          <Button 
+            size="xl" 
+            variant="primary" 
+            onClick={onRestart} 
+            className="w-full bg-neon-green text-carbon-950 font-bold"
+          >
             ↻ Repeat Session
           </Button>
-          <Button size="lg" variant="secondary" onClick={onExit} fullWidth>
+          <Button 
+            size="lg" 
+            variant="secondary" 
+            onClick={handleViewProgress} 
+            className="w-full border border-carbon-700 text-warm-cream hover:bg-carbon-900"
+          >
             View Recovery Progress →
           </Button>
         </div>
@@ -175,9 +192,9 @@ export default function SessionComplete({
 
 function StatBox({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="glass-card rounded-xl p-3 text-center">
+    <div className="glass-card rounded-xl p-3 text-center border border-carbon-800">
       <p className={`font-display text-2xl font-black ${color}`}>{value}</p>
-      <p className="text-xs font-mono text-carbon-500 uppercase mt-0.5">{label}</p>
+      <p className="text-[10px] font-mono text-carbon-500 uppercase mt-0.5">{label}</p>
     </div>
   )
 }

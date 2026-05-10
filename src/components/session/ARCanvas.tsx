@@ -1,6 +1,6 @@
 // ============================================================
 // GamiPhysio AR — ARCanvas
-// Three.js 3D bounding boxes and target zones over webcam feed.
+// Three.js 2D bounding boxes and target zones over webcam feed.
 // ============================================================
 'use client'
 
@@ -106,7 +106,7 @@ function drawBoundingBox(
   roundRect(ctx, minX, minY, bw, bh, corner)
   ctx.fill()
 
-  // Corner brackets (sporty look — not full rectangle)
+  // Corner brackets
   const bracketLen = 24
   ctx.strokeStyle = color
   ctx.lineWidth   = 3
@@ -114,8 +114,8 @@ function drawBoundingBox(
   ctx.shadowColor = color
   ctx.shadowBlur  = inZone ? 12 : 6
 
-  const corners: [number, number, number, number, number, number, number, number][] = [
-    // [x1,y1 → x2,y2] + [x1,y1 → x3,y3]
+  // 🟢 FIXED: Changed from 8 numbers to 6 numbers to match coordinates provided
+  const corners: [number, number, number, number, number, number][] = [
     [minX, minY, minX + bracketLen, minY, minX, minY + bracketLen],  // TL
     [maxX, minY, maxX - bracketLen, minY, maxX, minY + bracketLen],  // TR
     [minX, maxY, minX + bracketLen, maxY, minX, maxY - bracketLen],  // BL
@@ -144,7 +144,6 @@ function drawTargetZone(
   h: number,
   config: AROverlayConfig
 ) {
-  // Draw arc indicator at the primary joint location
   const jointPos = getPrimaryJointPosition(landmarks, bodyPart, w, h)
   if (!jointPos) return
 
@@ -162,19 +161,16 @@ function drawTargetZone(
   ctx.shadowBlur  = inZone ? 16 : 0
   ctx.globalAlpha = 0.85
 
-  // Background arc (full range)
   ctx.beginPath()
   ctx.arc(x, y, radius, arcStart, arcEnd)
   ctx.strokeStyle = 'rgba(255,255,255,0.1)'
   ctx.stroke()
 
-  // Active arc
   ctx.beginPath()
   ctx.arc(x, y, radius, arcStart, arcEnd)
   ctx.strokeStyle = color
   ctx.stroke()
 
-  // Pulsing dot at center
   ctx.beginPath()
   ctx.arc(x, y, inZone ? 8 : 5, 0, Math.PI * 2)
   ctx.fillStyle = color
@@ -192,7 +188,6 @@ function drawAngleLabel(
   h: number,
   config: AROverlayConfig
 ) {
-  // Position label near top-right area of body
   const nose = landmarks[0]
   if (!nose) return
 
@@ -206,7 +201,6 @@ function drawAngleLabel(
   ctx.font = 'bold 22px "Barlow Condensed", sans-serif'
   ctx.textAlign = 'left'
 
-  // Background pill
   const metrics = ctx.measureText(label)
   const pw = metrics.width + 20
   const ph = 32
@@ -215,7 +209,6 @@ function drawAngleLabel(
   roundRect(ctx, x - 10, y - ph + 8, pw, ph, 8)
   ctx.fill()
 
-  // Text
   ctx.fillStyle = color
   ctx.shadowColor = color
   ctx.shadowBlur = inZone ? 10 : 0
@@ -231,11 +224,11 @@ function getPrimaryJointPosition(
   h: number
 ): { x: number; y: number } | null {
   const JOINT_INDEX: Record<BodyPart, number> = {
-    neck:      0,   // nose proxy
-    back:      23,  // left hip
-    shoulders: 11,  // left shoulder
-    knees:     25,  // left knee
-    ankles:    27,  // left ankle
+    neck:      0,   
+    back:      23,  
+    shoulders: 11,  
+    knees:     25,  
+    ankles:    27,  
   }
 
   const idx = JOINT_INDEX[bodyPart]
