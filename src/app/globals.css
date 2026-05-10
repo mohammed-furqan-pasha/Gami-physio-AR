@@ -1,0 +1,253 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   GamiPhysio AR — Global Styles & Design Tokens
+   Vibe: Bold/Sporty Gamified + Warm Accessible
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Nunito:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ── Font families ── */
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body:    'Nunito', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+
+  /* ── Carbon palette (dark backgrounds) ── */
+  --carbon-950: #080A0C;
+  --carbon-900: #0E1114;
+  --carbon-800: #161B20;
+  --carbon-700: #1E252D;
+  --carbon-600: #2A3340;
+  --carbon-500: #374250;
+
+  /* ── Neon accents (sporty/gamified) ── */
+  --neon-green:  #39FF14;
+  --neon-lime:   #B5F01A;
+  --neon-yellow: #FFE500;
+
+  /* ── Warm accents (accessibility) ── */
+  --warm-cream:  #FFF8EE;
+  --warm-amber:  #FFB347;
+  --warm-coral:  #FF6B6B;
+  --warm-sand:   #E8D5B7;
+
+  /* ── Severity colors ── */
+  --severity-mild:     #39FF14;
+  --severity-moderate: #FFE500;
+  --severity-severe:   #FF6B6B;
+
+  /* ── Score colors ── */
+  --score-poor:    #FF4444;
+  --score-fair:    #FF8C00;
+  --score-good:    #FFE500;
+  --score-great:   #B5F01A;
+  --score-perfect: #39FF14;
+
+  /* ── HUD glass effect ── */
+  --hud-bg:     rgba(14, 17, 20, 0.85);
+  --hud-border: rgba(57, 255, 20, 0.2);
+
+  /* ── Touch targets (accessibility) ── */
+  --min-touch: 48px;
+  --min-touch-lg: 64px;
+}
+
+/* ── Base reset ────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--carbon-950);
+  color: var(--warm-cream);
+  min-height: 100dvh;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Typography ────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+code, pre, .font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ── Scrollbar styling ─────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--carbon-900); }
+::-webkit-scrollbar-thumb {
+  background: var(--carbon-600);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--neon-green); }
+
+/* ── Focus ring (accessibility) ────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--neon-green);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ── Utility: neon text glow ───────────────────────────────── */
+.text-neon-glow {
+  text-shadow:
+    0 0 10px var(--neon-green),
+    0 0 30px rgba(57, 255, 20, 0.5);
+}
+
+.text-warm-glow {
+  text-shadow:
+    0 0 10px var(--warm-amber),
+    0 0 20px rgba(255, 179, 71, 0.4);
+}
+
+/* ── Utility: glass card ───────────────────────────────────── */
+.glass-card {
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ── Utility: neon border pulse ────────────────────────────── */
+.neon-border {
+  border: 1px solid var(--neon-green);
+  box-shadow:
+    0 0 8px rgba(57, 255, 20, 0.3),
+    inset 0 0 8px rgba(57, 255, 20, 0.05);
+}
+
+/* ── Utility: score gradient text ─────────────────────────── */
+.score-gradient-text {
+  background: linear-gradient(135deg, var(--neon-green), var(--neon-yellow));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── AR Session: fullscreen camera ────────────────────────── */
+.ar-video {
+  transform: scaleX(-1); /* Mirror for natural AR feel */
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+}
+
+.ar-canvas {
+  transform: scaleX(-1);
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+}
+
+/* ── Session HUD overlay ───────────────────────────────────── */
+.session-hud {
+  position: absolute;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 1rem;
+}
+
+/* ── Guardian mode: red alert pulse ────────────────────────── */
+.guardian-pulse {
+  animation: guardianPulse 2s ease-in-out infinite;
+}
+
+@keyframes guardianPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.4); }
+  50%       { box-shadow: 0 0 0 12px rgba(255, 107, 107, 0); }
+}
+
+/* ── Jitter shake ──────────────────────────────────────────── */
+.jitter-shake {
+  animation: jitterShake 0.5s ease-in-out;
+}
+
+@keyframes jitterShake {
+  0%,100% { transform: translateX(0); }
+  25%     { transform: translateX(-8px); }
+  75%     { transform: translateX(8px); }
+}
+
+/* ── Progress ring ─────────────────────────────────────────── */
+.progress-ring-circle {
+  transition: stroke-dashoffset 0.1s linear;
+  transform-origin: 50% 50%;
+  transform: rotate(-90deg);
+}
+
+/* ── Calendar heatmap overrides ────────────────────────────── */
+.react-calendar-heatmap text {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  fill: #374250;
+}
+
+.react-calendar-heatmap .color-empty {
+  fill: #1E252D;
+}
+
+.react-calendar-heatmap .color-scale-1 { fill: #1a3a1a; }
+.react-calendar-heatmap .color-scale-2 { fill: #2d6e2d; }
+.react-calendar-heatmap .color-scale-3 { fill: #39FF14; opacity: 0.7; }
+.react-calendar-heatmap .color-scale-4 { fill: #39FF14; }
+
+/* ── Milestone badge pop ───────────────────────────────────── */
+@keyframes badgePop {
+  0%   { transform: scale(0) rotate(-15deg); opacity: 0; }
+  60%  { transform: scale(1.15) rotate(3deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.badge-pop {
+  animation: badgePop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* ── Accessible large button ────────────────────────────────── */
+.btn-accessible {
+  min-height: var(--min-touch-lg);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ── Page transition ───────────────────────────────────────── */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: pageIn 0.35s ease-out forwards;
+}
+
+/* ── Noise texture overlay (subtle depth) ──────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 128px 128px;
+}
