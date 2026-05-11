@@ -88,16 +88,19 @@ export default function SessionPage() {
     onSetComplete: (_set: number) => { timer.triggerRest() },
   })
 
+  // ── Memoize onLandmarks to prevent camera permission re-requests ──
+  const handleLandmarks = useCallback((landmarks: PoseLandmarks) => {
+    if (timer.state.phase === 'active') {
+      scoring.processFrame(landmarks)
+    }
+  }, [timer.state.phase, scoring])
+
   // ── Pose Hook Integration ──
   const pose = usePose({
     videoRef,
     canvasRef,
     enabled: ready && !sessionComplete,
-    onLandmarks: (landmarks) => {
-      if (timer.state.phase === 'active') {
-        scoring.processFrame(landmarks)
-      }
-    },
+    onLandmarks: handleLandmarks,
   })
 
   useEffect(() => {
@@ -164,9 +167,9 @@ export default function SessionPage() {
           opacity: 1,
           // 🔴 Removed backgroundColor: '#000' as it can mask the hardware stream
         }}
+        autoPlay
         playsInline
         muted
-        // 🟢 autoPlay removed: controlled manually by usePose init sequence
       />
 
       {/* ── 2. Skeleton Canvas (Not Mirrored in CSS) ── */}

@@ -43,6 +43,7 @@ export function usePose({
   const isMounted      = useRef(true)
   const isProcessing   = useRef(false)
   const canvasSize     = useRef({ w: 0, h: 0 })
+  const onResultsRef   = useRef<any>(null) // 🟢 Store onResults in ref
 
   const onResults = useCallback((results: any) => {
     isProcessing.current = false
@@ -79,6 +80,14 @@ export function usePose({
     setState({ landmarks, isDetected, fps: avgFps, jitterScore, personCount: isDetected ? 1 : 0 })
   }, [canvasRef, onLandmarks])
 
+  // 🟢 Update ref when onResults changes, but don't trigger camera re-init
+  useEffect(() => {
+    onResultsRef.current = onResults
+    if (poseRef.current) {
+      poseRef.current.onResults(onResults)
+    }
+  }, [onResults])
+
   useEffect(() => {
     if (!enabled) return
     isMounted.current = true
@@ -90,7 +99,7 @@ export function usePose({
       try {
         // 🟢 Simplest possible request: no resolution constraints to avoid driver hangs
         stream = await navigator.mediaDevices.getUserMedia({ 
-          video: true, 
+          video: true,
           audio: false 
         })
       } catch (err) {
@@ -180,7 +189,7 @@ export function usePose({
       poseRef.current?.close?.()
       if (videoRef.current) videoRef.current.srcObject = null
     }
-  }, [enabled, onResults, videoRef])
+  }, [enabled, videoRef])
 
   return state
 }
