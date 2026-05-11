@@ -112,20 +112,24 @@ export async function parseMedicalReport(
 
   let rawText = '';
 
+  // ... inside parseMedicalReport function ...
+
   try {
     // Attempt the real Google API call
     rawText = await callGemini(contents, 512)
   } catch (error) {
     console.error('[OCR] Gemini API failed or rate-limited. Activating Fallback Mode.', error);
     
-    // FALLBACK MODE: Prevents the app from crashing during presentations
+    // 🟢 FALLBACK MODE: Updated to simulate a Shoulder injury
     rawText = JSON.stringify({
-      body_part: "knees",
-      severity: "moderate",
-      keywords: ["ligament", "swelling", "pain", "flexion"],
-      notes: "SIMULATED REPORT: Patient presents with moderate knee strain. Focus on controlled flexion."
+      body_part: "shoulders", // Changed from "knees"
+      severity: "mild",
+      keywords: ["extension", "rotator cuff", "pain", "stiffness"],
+      notes: "SIMULATED REPORT: Patient presents with limited shoulder extension and mild rotator cuff stiffness. Focus on gradual mobility."
     });
   }
+
+// ... rest of the file ...
 
   // Strip markdown fences if Gemini wraps in ```json
   const cleaned = rawText

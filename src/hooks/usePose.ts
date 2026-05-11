@@ -1,3 +1,7 @@
+// ============================================================
+// GamiPhysio AR — usePose Hook (v5.1 — Hardware Compatibility)
+// Fixes: getUserMedia hang and Windows Driver conflicts.
+// ============================================================
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
@@ -6,9 +10,8 @@ import { MIN_LANDMARK_VISIBILITY } from '@/lib/constants'
 import { computeJitterScore } from '@/lib/angleMath'
 
 const JITTER_WINDOW = 20
-const FPS_WINDOW = 30
-// Lock to a specific stable version to avoid the "Module" error
-const MEDIAPIPE_VERSION = '0.5.1675923585' 
+const FPS_WINDOW    = 30
+const MP_POSE_VERSION = '0.5.1675469404'
 
 export interface UsePoseOptions {
   videoRef: React.RefObject<HTMLVideoElement>
@@ -31,24 +34,21 @@ export function usePose({
     personCount: 0,
   })
 
-  const poseRef = useRef<any>(null)
-  const cameraRef = useRef<any>(null)
-  const poseInitRef = useRef<boolean>(false) // Prevent double-initialization
-  const angleHistory = useRef<number[]>([])
-  const fpsHistory = useRef<number[]>([])
-  const lastFrameTime = useRef<number>(0)
-  const isMounted = useRef(true)
-
-  // Use a Ref for the callback to prevent the useEffect from re-running on every render
-  const onResultsRef = useRef(onLandmarks)
-  useEffect(() => {
-    onResultsRef.current = onLandmarks
-  }, [onLandmarks])
+  const poseRef        = useRef<any>(null)
+  const rafRef         = useRef<number>(0)
+  const streamRef      = useRef<MediaStream | null>(null)
+  const angleHistory   = useRef<number[]>([])
+  const fpsHistory     = useRef<number[]>([])
+  const lastFrameTime  = useRef<number>(0)
+  const isMounted      = useRef(true)
+  const isProcessing   = useRef(false)
+  const canvasSize     = useRef({ w: 0, h: 0 })
 
   const onResults = useCallback((results: any) => {
+    isProcessing.current = false
     if (!isMounted.current) return
 
-    const now = performance.now()
+    const now   = performance.now()
     const delta = now - lastFrameTime.current
     lastFrameTime.current = now
 
@@ -60,54 +60,87 @@ export function usePose({
 
     const landmarks: PoseLandmarks | null = results.poseLandmarks ?? null
     const isDetected = landmarks
-      ? landmarks.some(lm => lm.visibility >= MIN_LANDMARK_VISIBILITY)
+      ? landmarks.some((lm: any) => lm.visibility >= MIN_LANDMARK_VISIBILITY)
       : false
 
     let jitterScore = 0
     if (landmarks && isDetected) {
       const hipY = landmarks[23]?.y ?? 0
-      angleHistory.current = [
-        ...angleHistory.current.slice(-(JITTER_WINDOW - 1)),
-        hipY * 180,
-      ]
+      angleHistory.current = [...angleHistory.current.slice(-(JITTER_WINDOW - 1)), hipY * 180]
       jitterScore = computeJitterScore(angleHistory.current)
     }
 
-    if (canvasRef.current && results.poseLandmarks) {
-      drawPoseOnCanvas(canvasRef.current, results)
+    if (canvasRef.current) {
+      drawPoseOnCanvas(canvasRef.current, landmarks, canvasSize.current)
     }
 
-    if (landmarks && isDetected && onResultsRef.current) {
-      onResultsRef.current(landmarks)
-    }
+    if (landmarks && isDetected && onLandmarks) onLandmarks(landmarks)
 
-    setState({
-      landmarks,
-      isDetected,
-      fps: avgFps,
-      jitterScore,
-      personCount: isDetected ? 1 : 0,
-    })
-  }, [canvasRef])
+    setState({ landmarks, isDetected, fps: avgFps, jitterScore, personCount: isDetected ? 1 : 0 })
+  }, [canvasRef, onLandmarks])
 
   useEffect(() => {
-    if (!enabled || poseInitRef.current) return
-    
+    if (!enabled) return
     isMounted.current = true
-    poseInitRef.current = true // Lock initialization
+    let cleanedUp = false
 
-    async function initMediaPipe() {
-      // Dynamic imports
-      const { Pose } = await import('@mediapipe/pose')
-      const { Camera } = await import('@mediapipe/camera_utils')
+    async function init() {
+      console.info('📷 [v5.1] Requesting ANY available video stream...')
+      let stream: MediaStream
+      try {
+        // 🟢 Simplest possible request: no resolution constraints to avoid driver hangs
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: true, 
+          audio: false 
+        })
+      } catch (err) {
+        console.error('❌ [v5.1] Camera hardware failed to initialize:', err)
+        return
+      }
 
-      if (!videoRef.current || !isMounted.current) return
+      if (cleanedUp) { 
+        stream.getTracks().forEach(t => t.stop())
+        return 
+      }
+      streamRef.current = stream
 
-      const pose = new Pose({
-        locateFile: (file: string) => {
-          // Force the use of the locked version for WASM files
-          return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@${MEDIAPIPE_VERSION}/${file}`
-        },
+      const video = videoRef.current
+      if (!video) return
+      
+      console.info('🔗 [v5.1] Attaching stream to element...')
+      video.srcObject = stream
+      
+      await new Promise<void>((resolve) => {
+        const check = () => {
+          if (video.readyState >= 2) {
+            video.play().then(() => {
+              console.info('✅ [v5.1] Video is officially PLAYING.')
+              resolve()
+            }).catch(resolve)
+          } else {
+            setTimeout(check, 100)
+          }
+        }
+        check()
+      })
+
+      if (cleanedUp) return
+
+      if (canvasRef.current) {
+        const rect = canvasRef.current.getBoundingClientRect()
+        canvasSize.current = { w: rect.width, h: rect.height }
+        canvasRef.current.width = rect.width
+        canvasRef.current.height = rect.height
+      }
+
+      console.info('🧠 [v5.1] Loading MediaPipe...')
+      await loadScript(`https://cdn.jsdelivr.net/npm/@mediapipe/pose@${MP_POSE_VERSION}/pose.js`)
+      
+      const PoseClass = (window as any).Pose
+      if (!PoseClass) return
+
+      const pose = new PoseClass({
+        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@${MP_POSE_VERSION}/${file}`,
       })
 
       pose.setOptions({
@@ -118,78 +151,77 @@ export function usePose({
       })
 
       pose.onResults(onResults)
+      await pose.initialize()
       poseRef.current = pose
+      console.info('🚀 [v5.1] Engine READY.')
 
-      const camera = new Camera(videoRef.current, {
-        onFrame: async () => {
-          if (videoRef.current && poseRef.current && isMounted.current) {
-            try {
-              await poseRef.current.send({ image: videoRef.current })
-            } catch (e) {
-              console.error("Pose send error:", e)
-            }
+      const sendFrame = async () => {
+        if (cleanedUp || !isMounted.current) return
+        const v = videoRef.current
+        if (v && v.readyState >= 2 && !v.paused && !isProcessing.current && poseRef.current) {
+          isProcessing.current = true
+          try {
+            await poseRef.current.send({ image: v })
+          } catch {
+            isProcessing.current = false
           }
-        },
-        width: 1280,
-        height: 720,
-      })
-
-      camera.start()
-      cameraRef.current = camera
+        }
+        rafRef.current = requestAnimationFrame(sendFrame)
+      }
+      rafRef.current = requestAnimationFrame(sendFrame)
     }
 
-    initMediaPipe().catch(err => {
-      console.error("MediaPipe Init Error:", err)
-      poseInitRef.current = false // Allow retry on failure
-    })
+    init().catch(err => console.error('FATAL:', err))
 
     return () => {
-      isMounted.current = false
-      poseInitRef.current = false
-      cameraRef.current?.stop()
-      poseRef.current?.close()
+      cleanedUp = true; isMounted.current = false
+      cancelAnimationFrame(rafRef.current)
+      streamRef.current?.getTracks().forEach(t => t.stop())
+      poseRef.current?.close?.()
+      if (videoRef.current) videoRef.current.srcObject = null
     }
-  }, [enabled, videoRef, onResults]) // onResults is now stable
+  }, [enabled, onResults, videoRef])
 
   return state
 }
 
-// ── Canvas drawing (unchanged but included for completeness) ──
-function drawPoseOnCanvas(canvas: HTMLCanvasElement, results: any) {
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  if (!results.poseLandmarks) return
-
-  const connections = getPoseConnections()
-  ctx.strokeStyle = 'rgba(57, 255, 20, 0.7)'
-  ctx.lineWidth = 2
-
-  for (const [i, j] of connections) {
-    const a = results.poseLandmarks[i]
-    const b = results.poseLandmarks[j]
-    if (a && b && a.visibility > 0.5 && b.visibility > 0.5) {
-      ctx.beginPath()
-      ctx.moveTo(a.x * canvas.width, a.y * canvas.height)
-      ctx.lineTo(b.x * canvas.width, b.y * canvas.height)
-      ctx.stroke()
-    }
-  }
-
-  for (const lm of results.poseLandmarks) {
-    if (lm.visibility < 0.5) continue
-    ctx.beginPath()
-    ctx.arc(lm.x * canvas.width, lm.y * canvas.height, 5, 0, Math.PI * 2)
-    ctx.fillStyle = '#FFE500'
-    ctx.fill()
-  }
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve()
+    const s = document.createElement('script')
+    s.src = src; s.crossOrigin = 'anonymous'
+    s.onload = () => resolve()
+    document.head.appendChild(s)
+  })
 }
 
-function getPoseConnections(): [number, number][] {
-  return [
+function drawPoseOnCanvas(canvas: HTMLCanvasElement, landmarks: PoseLandmarks | null, size: { w: number, h: number }) {
+  const ctx = canvas.getContext('2d')
+  if (!ctx || !landmarks) return
+  ctx.clearRect(0, 0, size.w, size.h)
+
+  const CONNECTIONS: [number, number][] = [
     [11, 12], [11, 23], [12, 24], [23, 24],
     [11, 13], [13, 15], [12, 14], [14, 16],
-    [23, 25], [25, 27], [27, 31], [24, 26], [26, 28], [28, 32],
-    [0, 11], [0, 12],
+    [23, 25], [25, 27], [24, 26], [26, 28]
   ]
+
+  ctx.lineWidth = 4; ctx.lineCap = 'round'
+  ctx.strokeStyle = '#39FF14'
+
+  for (const [i, j] of CONNECTIONS) {
+    const a = landmarks[i]; const b = landmarks[j]
+    if (!a || !b || a.visibility < 0.5 || b.visibility < 0.5) continue
+    ctx.beginPath()
+    ctx.moveTo((1 - a.x) * size.w, a.y * size.h)
+    ctx.lineTo((1 - b.x) * size.w, b.y * size.h)
+    ctx.stroke()
+  }
+
+  for (const lm of landmarks) {
+    if (lm.visibility < 0.5) continue
+    ctx.beginPath()
+    ctx.arc((1 - lm.x) * size.w, lm.y * size.h, 5, 0, Math.PI * 2)
+    ctx.fillStyle = '#FFE500'; ctx.fill()
+  }
 }

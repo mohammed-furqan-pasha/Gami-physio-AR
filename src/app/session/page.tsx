@@ -1,9 +1,13 @@
+// ============================================================
+// GamiPhysio AR — /session Page (v5 — Visual Fix)
+// Fixes: Black screen masking and autoPlay race conditions.
+// ============================================================
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import type { Exercise, PoseLandmarks, UserMode, RepResult, SessionState } from '@/types'
+import type { Exercise, PoseLandmarks, UserMode, SessionState } from '@/types'
 import { usePose }          from '@/hooks/usePose'
 import { useScoring }       from '@/hooks/useScoring'
 import { useSessionTimer }  from '@/hooks/useSessionTimer'
@@ -14,12 +18,11 @@ import { GuardianOverlay }  from '@/components/session/GuardianOverlay'
 import { GifPreview }       from '@/components/session/GifPreview'
 import { ARCanvas }         from '@/components/session/ARCanvas'
 
-// ── Session Complete Screen ────────────────────────────────────
 const SessionComplete = dynamic(() => import('./SessionComplete'), { ssr: false })
 
 export default function SessionPage() {
   const router = useRouter()
-  const isDev = process.env.NODE_ENV === 'development' // 🟢 Dev bypass flag
+  const isDev = process.env.NODE_ENV === 'development'
 
   // ── State ──────────────────────────────────────────────────
   const [exercise, setExercise]     = useState<Exercise | null>(null)
@@ -35,36 +38,35 @@ export default function SessionPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
+  // ── Load exercise + mode ────────────────────────────────────
   useEffect(() => {
-    const ex   = sessionStorage.getItem('gamiphysio_session_exercise')
-    const md   = sessionStorage.getItem('gamiphysio_session_mode') as UserMode | null
-
+    const ex = sessionStorage.getItem('gamiphysio_session_exercise')
+    const md = sessionStorage.getItem('gamiphysio_session_mode') as UserMode | null
     if (!ex) { router.push('/plan'); return }
-
     try {
       const parsed: Exercise = JSON.parse(ex)
       setExercise(parsed)
       setMode(md ?? (parsed.requires_guardian ? 'guardian' : 'solo'))
-      if (parsed.requires_guardian || md === 'guardian') {
-        setShowGuardianGate(true)
-      }
+      if (parsed.requires_guardian || md === 'guardian') setShowGuardianGate(true)
       setReady(true)
-    } catch {
-      router.push('/plan')
-    }
+    } catch { router.push('/plan') }
 
     import('@/lib/supabase').then(({ getOrCreateProfile }) => {
       getOrCreateProfile().then(p => setProfileId(p.id)).catch(console.error)
     })
   }, [router])
 
+  // ── Sync Dimensions ──────────────────────────────────────────
   useEffect(() => {
     function update() {
       if (containerRef.current) {
-        setDimensions({
-          w: containerRef.current.clientWidth,
-          h: containerRef.current.clientHeight,
-        })
+        const w = containerRef.current.clientWidth
+        const h = containerRef.current.clientHeight
+        setDimensions({ w, h })
+        if (canvasRef.current) {
+          canvasRef.current.width = w
+          canvasRef.current.height = h
+        }
       }
     }
     update()
@@ -83,23 +85,19 @@ export default function SessionPage() {
   const scoring = useScoring({
     exercise: exercise!,
     onSessionComplete: handleSessionComplete,
-    onSetComplete: (_set: number) => {
-      timer.triggerRest()
-    },
+    onSetComplete: (_set: number) => { timer.triggerRest() },
   })
 
-  const handleLandmarks = useCallback((landmarks: PoseLandmarks) => {
-    // Only process for scoring if session is active
-    if (timer.state.phase === 'active') {
-      scoring.processFrame(landmarks)
-    }
-  }, [timer.state.phase, scoring])
-
+  // ── Pose Hook Integration ──
   const pose = usePose({
     videoRef,
     canvasRef,
     enabled: ready && !sessionComplete,
-    onLandmarks: handleLandmarks,
+    onLandmarks: (landmarks) => {
+      if (timer.state.phase === 'active') {
+        scoring.processFrame(landmarks)
+      }
+    },
   })
 
   useEffect(() => {
@@ -121,12 +119,6 @@ export default function SessionPage() {
       setSessionComplete(true)
     },
   })
-
-  const handleGuardianProceed = () => {
-    setShowGuardianGate(false)
-    timer.start()
-    scoring.reset()
-  }
 
   const handleStart = () => {
     if (showGuardianGate) return
@@ -162,26 +154,29 @@ export default function SessionPage() {
 
   return (
     <div className="fixed inset-0 bg-carbon-950 overflow-hidden" ref={containerRef}>
-      {/* ── Camera feed ───────────────────────────────────── */}
+      
+      {/* ── 1. Video Layer: High Visibility ── */}
       <video
         ref={videoRef}
-        className="ar-video absolute inset-0 w-full h-full object-cover"
+        className="absolute inset-0 w-full h-full object-cover z-0"
+        style={{ 
+          transform: 'scaleX(-1)', 
+          opacity: 1,
+          // 🔴 Removed backgroundColor: '#000' as it can mask the hardware stream
+        }}
         playsInline
         muted
-        autoPlay
-        width="1280" 
-        height="720"
+        // 🟢 autoPlay removed: controlled manually by usePose init sequence
       />
 
-      {/* ── 2D skeleton canvas ────────────────────────────── */}
+      {/* ── 2. Skeleton Canvas (Not Mirrored in CSS) ── */}
       <canvas
         ref={canvasRef}
-        width={dimensions.w}
-        height={dimensions.h}
-        className="ar-canvas absolute inset-0 z-10 pointer-events-none"
+        className="absolute inset-0 z-10 pointer-events-none"
+        style={{ width: '100%', height: '100%' }}
       />
 
-      {/* ── Three.js AR overlay ───────────────────────────── */}
+      {/* ── 3. AR Overlays ── */}
       {pose.landmarks && (
         <ARCanvas
           landmarks={pose.landmarks}
@@ -194,6 +189,7 @@ export default function SessionPage() {
         />
       )}
 
+      {/* ── 4. UI Components ── */}
       {timer.state.phase === 'active' && (
         <div className="absolute top-20 right-4 z-20 w-36">
           <GifPreview exercise={exercise} compact />
@@ -203,49 +199,31 @@ export default function SessionPage() {
       {showGuardianGate && (
         <GuardianOverlay
           personCount={pose.personCount}
-          onProceed={handleGuardianProceed}
+          onProceed={() => { setShowGuardianGate(false); timer.start(); scoring.reset(); }}
           onCancel={() => router.push('/plan')}
           isActive={false}
         />
       )}
 
-      {!showGuardianGate && mode === 'guardian' && timer.state.phase === 'active' && (
-        <GuardianOverlay
-          personCount={pose.personCount}
-          onProceed={() => {}}
-          onCancel={() => {}}
-          isActive
-        />
-      )}
-
-      {/* ── Idle: Start prompt ────────────────────────────── */}
+      {/* Idle / Start State */}
       {timer.state.phase === 'idle' && !showGuardianGate && (
-        <div className="absolute inset-0 flex items-center justify-center z-20">
-          <div className="text-center space-y-6">
-            <p className="font-display text-5xl font-black text-warm-cream">
+        <div className="absolute inset-0 flex items-center justify-center z-20 bg-carbon-950/20 backdrop-blur-sm">
+          <div className="text-center space-y-6 px-4">
+            <h1 className="font-display text-4xl md:text-5xl font-black text-warm-cream uppercase">
               {exercise.name}
-            </p>
-            <p className="text-warm-sand max-w-xs mx-auto text-sm leading-relaxed px-4">
-              {exercise.description}
-            </p>
+            </h1>
             
-            {/* 🟢 Improved status message */}
-            {!pose.isDetected && !isDev && (
-              <p className="text-warm-amber text-sm font-mono animate-pulse">
-                Step into frame to begin…
-              </p>
-            )}
-            {isDev && !pose.isDetected && (
-              <p className="text-neon-green/50 text-xs font-mono">
-                [Dev Mode: Bypass Active]
-              </p>
-            )}
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-mono transition-colors ${
+              pose.isDetected ? 'border-neon-green/40 text-neon-green bg-neon-green/10' : 'border-warm-amber/40 text-warm-amber bg-warm-amber/10 animate-pulse'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${pose.isDetected ? 'bg-neon-green' : 'bg-warm-amber animate-pulse'}`} />
+              {pose.isDetected ? 'Subject detected — Ready' : 'Stand back to initialize camera...'}
+            </div>
 
             <button
               onClick={handleStart}
-              // 🟢 The Fix: Allow click if in Dev mode OR person detected
               disabled={!pose.isDetected && !isDev}
-              className={`px-12 py-5 rounded-xl2 bg-neon-green text-carbon-950 font-display font-black text-2xl uppercase tracking-widest shadow-neon-lg hover:shadow-neon-lg transition-all active:scale-95 min-h-touch-lg ${
+              className={`px-12 py-5 rounded-xl2 bg-neon-green text-carbon-950 font-display font-black text-2xl uppercase tracking-widest shadow-neon-lg transition-all active:scale-95 block mx-auto ${
                 (!pose.isDetected && !isDev) ? "opacity-40 cursor-not-allowed" : "opacity-100 cursor-pointer"
               }`}
             >
@@ -255,7 +233,6 @@ export default function SessionPage() {
         </div>
       )}
 
-      {/* ── Session HUD ───────────────────────────────────── */}
       {timer.state.phase !== 'idle' && (
         <SessionHUD
           sessionState={scoring.state}
@@ -270,14 +247,11 @@ export default function SessionPage() {
       )}
 
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30">
-        <VoiceSafety
-          voiceState={voiceSafety}
-          lastEvent={voiceSafety.lastEvent}
-        />
+        <VoiceSafety voiceState={voiceSafety} lastEvent={voiceSafety.lastEvent} />
       </div>
 
       {isDev && (
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 text-xs font-mono text-carbon-400 bg-carbon-950/50 px-2 py-1 rounded">
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 text-[10px] font-mono bg-carbon-950/80 px-3 py-1 rounded-full text-carbon-400">
           {pose.fps} fps · jitter {pose.jitterScore} · detected: {pose.isDetected ? 'YES' : 'NO'}
         </div>
       )}
